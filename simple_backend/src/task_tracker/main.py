@@ -1,89 +1,93 @@
-import json
-from fastapi import FastAPI
+
+import requests
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List
-from pathlib import Path
+import os
 
-TASKS_FILE = Path("tasks.json")
+# Константы для работы с jsonbin.io
+BIN_ID = "67b382a8ad19ca34f8076668"
+API_KEY = "$2a$10$uVthqN2OueSJ8FOe/QGTJOMq3mnvf5qNFM7hNcrNI7ub8YE4MYTuW"  #X-Master-Key
+BASE_URL = f"https://api.jsonbin.io/v3/b/67b382a8ad19ca34f8076668"
+
+
+HEADERS = {
+    "X-Master-Key": API_KEY,
+    "Content-Type": "application/json"
+}
 
 app = FastAPI()
-
-# Класс для работы с задачами
-class TaskStorage:
-    def __init__(self, file_path: Path = TASKS_FILE):
-        self.file_path = file_path
-
-    def _read_tasks(self) -> List[dict]:
-        #Чтение задач из файла
-        if self.file_path.exists():
-            with open(self.file_path, "r") as file:
-                return json.load(file)
-        return []
-
-    def _write_tasks(self, tasks: List[dict]):
-        #Запись задач в файл
-        with open(self.file_path, "w") as file:
-            json.dump(tasks, file, indent=4)
-
-    def get_all_tasks(self) -> List[dict]:
-        #Возвращает все задачи
-        return self._read_tasks()
-
-    def add_task(self, task: dict) -> dict:
-        #Добавление новой задачи
-        tasks = self._read_tasks()
-        task_id = len(tasks) + 1
-        task["id"] = task_id
-        tasks.append(task)
-        self._write_tasks(tasks)
-        return task
-
-    def update_task(self, task_id: int, updated_task: dict) -> dict:
-        #Обновление существующей задачи
-        tasks = self._read_tasks()
-        for task in tasks:
-            if task["id"] == task_id:
-                task.update(updated_task)
-                self._write_tasks(tasks)
-                return task
-        return {"error": "task not found"}
-
-    def delete_task(self, task_id: int) -> dict:
-        #Удаление задачи
-        tasks = self._read_tasks()
-        tasks = [task for task in tasks if task["id"] != task_id]
-        self._write_tasks(tasks)
-        return {"message": "task deleted successfully"}
-
-# Создаем объект для работы с задачами
-task_storage = TaskStorage()
 
 class Task(BaseModel):
     title: str
     status: str
 
+class TaskStorage:
+    """Класс для работы с удалённым JSON-хранилищем."""
+
+    @staticmethod
+    def _fetch_tasks():
+        """Получить список задач из jsonbin.io."""
+        response = requests.get(BASE_URL, headers=HEADERS)
+        if response.status_code == 200:
+            return response.json()["record"].get("tasks", [])
+        raise HTTPException(status_code=500, detail="Ошибка при получении данных")
+
+    @staticmethod
+    def _update_tasks(tasks):
+        """Обновить список задач в jsonbin.io."""
+        data = {"tasks": tasks}
+        response = requests.put(BASE_URL, json=data, headers=HEADERS)
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail="Ошибка при обновлении данных")
+
+    def get_all_tasks(self) -> List[dict]:
+        return self._fetch_tasks()
+
+    def add_task(self, task: dict) -> dict:
+        tasks = self._fetch_tasks()
+        task_id = len(tasks) + 1
+        task["id"] = task_id
+        tasks.append(task)
+        self._update_tasks(tasks)
+        return task
+
+    def update_task(self, task_id: int, updated_task: dict) -> dict:
+        tasks = self._fetch_tasks()
+        for task in tasks:
+            if task["id"] == task_id:
+                task.update(updated_task)
+                self._update_tasks(tasks)
+                return task
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+
+    def delete_task(self, task_id: int) -> dict:
+        tasks = self._fetch_tasks()
+        new_tasks = [task for task in tasks if task["id"] != task_id]
+
+        if len(new_tasks) == len(tasks):  # Если длина не изменилась — задачи не было
+            raise HTTPException(status_code=404, detail="Задача не найдена")
+
+        self._update_tasks(new_tasks)
+        return {"message": "Задача удалена"}
+
+# Создаём объект для работы с задачами
+task_storage = TaskStorage()
+
 @app.get('/tasks', response_model=List[Task])
 def get_tasks():
-    tasks = task_storage.get_all_tasks()  # Получаем все задачи
-    return tasks
+    return task_storage.get_all_tasks()
 
 @app.post('/task', response_model=Task)
 def create_task(task: Task):
-    new_task = task.dict()  # Преобразуем Pydantic объект в обычный словарь
-    created_task = task_storage.add_task(new_task)  # Добавляем задачу в хранилище
-    return created_task
+    return task_storage.add_task(task.dict())
 
 @app.put('/tasks/{task_id}', response_model=Task)
 def update_task(task_id: int, task: Task):
-    updated_task = task.dict()  # Преобразуем Pydantic объект в обычный словарь
-    result = task_storage.update_task(task_id, updated_task)  # Обновляем задачу
-    if "error" in result:
-        return result  # Если ошибка, возвращаем её
-    return result
+    return task_storage.update_task(task_id, task.dict())
 
 @app.delete('/tasks/{task_id}')
 def delete_task(task_id: int):
-    result = task_storage.delete_task(task_id)  # Удаляем задачу
-    return result
+    return task_storage.delete_task(task_id)
 
 
