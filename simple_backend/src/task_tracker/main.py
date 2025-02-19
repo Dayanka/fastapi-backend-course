@@ -1,4 +1,5 @@
 
+from cloudflare_ai import CloudflareAI  # Импортируем наш класс
 import requests
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -21,6 +22,7 @@ app = FastAPI()
 class Task(BaseModel):
     title: str
     status: str
+    solution: str = ""  # По умолчанию пустое, если AI не ответил
 
 class TaskStorage:
     """Класс для работы с удалённым JSON-хранилищем."""
@@ -80,14 +82,21 @@ def get_tasks():
 
 @app.post('/task', response_model=Task)
 def create_task(task: Task):
-    return task_storage.add_task(task.dict())
+    solution = CloudflareAI.get_task_solution(task.title)  # Получаем решение
+    task_dict = task.dict()
+    task_dict["solution"] = solution  # Добавляем решение в задачу
+    return task_storage.add_task(task_dict)  # Сохраняем
+
 
 @app.put('/tasks/{task_id}', response_model=Task)
 def update_task(task_id: int, task: Task):
-    return task_storage.update_task(task_id, task.dict())
+    task_dict = task.dict()
+    # Вызываем CloudflareAI для получения решения задачи
+    task_dict["solution"] = CloudflareAI.get_task_solution(task.title)
+    return task_storage.update_task(task_id, task_dict)
+
 
 @app.delete('/tasks/{task_id}')
 def delete_task(task_id: int):
     return task_storage.delete_task(task_id)
-
 
