@@ -1,14 +1,15 @@
-
-from cloudflare_ai import CloudflareAI
+from cloudflare_ai import CloudflareAI  # Импортируем наш класс
 import requests
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List
+import os
 
 # Константы для работы с jsonbin.io
 BIN_ID = "67b382a8ad19ca34f8076668"
-API_KEY = "$2a$10$uVthqN2OueSJ8FOe/QGTJOMq3mnvf5qNFM7hNcrNI7ub8YE4MYTuW"
-BASE_URL = f"https://api.jsonbin.io/v3/b/{BIN_ID}"
+API_KEY = "$2a$10$uVthqN2OueSJ8FOe/QGTJOMq3mnvf5qNFM7hNcrNI7ub8YE4MYTuW"  #X-Master-Key
+BASE_URL = f"https://api.jsonbin.io/v3/b/67b382a8ad19ca34f8076668"
+
 
 HEADERS = {
     "X-Master-Key": API_KEY,
@@ -23,19 +24,21 @@ class Task(BaseModel):
     solution: str = ""  # По умолчанию пустое, если AI не ответил
 
 class TaskStorage:
-    """Клиент для работы с задачами (JSON-хранилище)."""
+    """Класс для работы с удалённым JSON-хранилищем."""
 
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-
-    def _fetch_tasks(self):
+    @staticmethod
+    def _fetch_tasks():
+        """Получить список задач из jsonbin.io."""
         response = requests.get(BASE_URL, headers=HEADERS)
         if response.status_code == 200:
             return response.json()["record"].get("tasks", [])
         raise HTTPException(status_code=500, detail="Ошибка при получении данных")
 
-    def _update_tasks(self, tasks):
-        response = requests.put(BASE_URL, json={"tasks": tasks}, headers=HEADERS)
+    @staticmethod
+    def _update_tasks(tasks):
+        """Обновить список задач в jsonbin.io."""
+        data = {"tasks": tasks}
+        response = requests.put(BASE_URL, json=data, headers=HEADERS)
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail="Ошибка при обновлении данных")
 
@@ -44,7 +47,8 @@ class TaskStorage:
 
     def add_task(self, task: dict) -> dict:
         tasks = self._fetch_tasks()
-        task["id"] = len(tasks) + 1
+        task_id = len(tasks) + 1
+        task["id"] = task_id
         tasks.append(task)
         self._update_tasks(tasks)
         return task
@@ -62,17 +66,14 @@ class TaskStorage:
         tasks = self._fetch_tasks()
         new_tasks = [task for task in tasks if task["id"] != task_id]
 
-        if len(new_tasks) == len(tasks):
+        if len(new_tasks) == len(tasks):  # Если длина не изменилась — задачи не было
             raise HTTPException(status_code=404, detail="Задача не найдена")
 
         self._update_tasks(new_tasks)
         return {"message": "Задача удалена"}
 
 # Создаём объект для работы с задачами
-task_storage = TaskStorage(API_KEY)
-
-# Создаём объект CloudflareAI
-cloudflare_ai = CloudflareAI(api_key=API_KEY, account_id="your_account_id", model_name="text-generation")
+task_storage = TaskStorage()
 
 @app.get('/tasks', response_model=List[Task])
 def get_tasks():
@@ -80,17 +81,20 @@ def get_tasks():
 
 @app.post('/task', response_model=Task)
 def create_task(task: Task):
-    solution = cloudflare_ai.get_task_solution(task.title)  # Вызываем метод у объекта
+    # Получаем решение через CloudflareAI
+    solution = CloudflareAI.get_task_solution(task.title)
     task_dict = task.dict()
-    task_dict["solution"] = solution
-    return task_storage.add_task(task_dict)
+    task_dict["solution"] = solution  # Добавляем решение в задачу
+    return task_storage.add_task(task_dict)  # Сохраняем задачу с решением
 
 @app.put('/tasks/{task_id}', response_model=Task)
 def update_task(task_id: int, task: Task):
+    # Получаем решение через CloudflareAI
     task_dict = task.dict()
-    task_dict["solution"] = cloudflare_ai.get_task_solution(task.title)  # Вызываем метод у объекта
-    return task_storage.update_task(task_id, task_dict)
+    task_dict["solution"] = CloudflareAI.get_task_solution(task.title)
+    return task_storage.update_task(task_id, task_dict)  # Обновляем задачу с решением
 
 @app.delete('/tasks/{task_id}')
 def delete_task(task_id: int):
     return task_storage.delete_task(task_id)
+
