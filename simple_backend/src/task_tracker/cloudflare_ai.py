@@ -1,33 +1,42 @@
 import requests
 
-# Кастомные исключения
+# Кастомные исключения с переопределёнными сообщениями
 class CloudflareAIError(Exception):
-    """Базовое исключение для CloudflareAI."""
-    pass
+    """Базовое исключение для CloudflareAI"""
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
 
 class CloudflareAPIError(CloudflareAIError):
-    """Ошибка при запросе к Cloudflare API (сетевая ошибка, недоступность API и т. д.)."""
-    pass
+    """Ошибка при запросе к Cloudflare API (сетевая ошибка, недоступность API и тд)"""
+    def __init__(self, message: str = "Ошибка при запросе к Cloudflare API"):
+        super().__init__(message)
 
 class CloudflareAuthError(CloudflareAPIError):
-    """Ошибка авторизации (неверный токен, недостаточно прав)."""
-    pass
+    """Ошибка авторизации (неверный токен, недостаточно прав)"""
+    def __init__(self, message: str = "Ошибка авторизации: неверный токен или недостаточно прав"):
+        super().__init__(message)
 
 class CloudflareRateLimitError(CloudflareAPIError):
-    """Ошибка превышения лимитов запросов."""
-    pass
+    """Ошибка превышения лимитов запросов"""
+    def __init__(self, message: str = "Превышен лимит запросов к Cloudflare AI"):
+        super().__init__(message)
 
 class CloudflareServerError(CloudflareAPIError):
-    """Ошибка сервера Cloudflare (5xx ошибки)."""
-    pass
+    """Ошибка сервера Cloudflare (5xx ошибки)"""
+    def __init__(self, message: str = "Ошибка сервера Cloudflare (5xx ошибки)"):
+        super().__init__(message)
 
 class CloudflareResponseError(CloudflareAIError):
-    """Ошибка обработки ответа от Cloudflare (некорректные данные)."""
-    pass
+    """Ошибка обработки ответа от Cloudflare (некорректные данные)"""
+    def __init__(self, message: str = "Ответ от Cloudflare некорректен или не содержит ожидаемые данные"):
+        super().__init__(message)
 
 class CloudflareTimeoutError(CloudflareAPIError):
-    """Ошибка тайм-аута запроса."""
-    pass
+    """Ошибка тайм-аута запроса"""
+    def __init__(self, message: str = "Запрос к Cloudflare AI превысил время ожидания"):
+        super().__init__(message)
+
 
 # Класс для работы с Cloudflare AI
 class CloudflareAI:
@@ -51,6 +60,7 @@ class CloudflareAI:
         }
 
         try:
+            # Отправка запроса к API
             response = requests.post(cls.URL, json=data, headers=cls.HEADERS, timeout=10)
             response.raise_for_status()  # Проверка статуса ответа
 
@@ -77,4 +87,5 @@ class CloudflareAI:
 
         except requests.exceptions.RequestException as e:
             raise CloudflareAPIError(f"Ошибка при запросе к Cloudflare: {e}")
+
 

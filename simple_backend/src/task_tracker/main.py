@@ -26,23 +26,26 @@ class Task(BaseModel):
     solution: str = ""  # По умолчанию пустое, если AI не ответил
 
 class TaskStorage:
-    """Класс для работы с удалённым JSON-хранилищем."""
+    """Класс для работы с удалённым JSON хранилищем"""
+
+    @staticmethod
+    def _send_request(method: str, url: str, data=None):
+        """Универсальный??? метод для отправки HTTP запросов """
+        response = requests.request(method, url, json=data, headers=HEADERS)
+        if response.status_code == 200:
+            return response.json()
+        raise HTTPException(status_code=500, detail=f"Ошибка при {method} данных")
 
     @staticmethod
     def _fetch_tasks():
-        """Получить список задач из jsonbin.io."""
-        response = requests.get(BASE_URL, headers=HEADERS)
-        if response.status_code == 200:
-            return response.json()["record"].get("tasks", [])
-        raise HTTPException(status_code=500, detail="Ошибка при получении данных")
+        """Получить список задач из jsonbin io """
+        response = TaskStorage._send_request("GET", BASE_URL)
+        return response["record"].get("tasks", [])
 
     @staticmethod
     def _update_tasks(tasks):
-        """Обновить список задач в jsonbin.io."""
-        data = {"tasks": tasks}
-        response = requests.put(BASE_URL, json=data, headers=HEADERS)
-        if response.status_code != 200:
-            raise HTTPException(status_code=500, detail="Ошибка при обновлении данных")
+        """Обновить список задач в jsonbin io """
+        TaskStorage._send_request("PUT", BASE_URL, data={"tasks": tasks})
 
     def get_all_tasks(self) -> List[dict]:
         return self._fetch_tasks()
