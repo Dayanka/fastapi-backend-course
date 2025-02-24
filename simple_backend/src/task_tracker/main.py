@@ -4,12 +4,14 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List
 import os
+from dotenv import load_dotenv
 
-# Константы для работы с jsonbin.io
-BIN_ID = "67b382a8ad19ca34f8076668"
-API_KEY = "$2a$10$uVthqN2OueSJ8FOe/QGTJOMq3mnvf5qNFM7hNcrNI7ub8YE4MYTuW"  #X-Master-Key
-BASE_URL = f"https://api.jsonbin.io/v3/b/67b382a8ad19ca34f8076668"
+load_dotenv()
 
+
+BIN_ID = os.getenv("BIN_ID")
+API_KEY = os.getenv("API_KEY")
+BASE_URL = f"https://api.jsonbin.io/v3/b/{BIN_ID}"
 
 HEADERS = {
     "X-Master-Key": API_KEY,
